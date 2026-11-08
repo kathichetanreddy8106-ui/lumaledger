@@ -3,26 +3,32 @@ package com.lumaledger.exception;
 
 import com.lumaledger.service.TransactionNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
     private static final Logger logger =
-    LoggerFactory.getLogger(GlobalExceptionHandler.class);
+            LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(TransactionNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(
@@ -96,12 +102,64 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(
+            ResponseStatusException ex,
+            HttpServletRequest request) {
+
+        HttpStatus status = HttpStatus.valueOf(
+                ex.getStatusCode().value()
+        );
+
+        String message = ex.getReason() != null
+                ? ex.getReason()
+                : status.getReasonPhrase();
+
+        return buildResponse(
+                status,
+                message,
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParameter(
+            MissingServletRequestParameterException ex,
+            HttpServletRequest request) {
+
+        String message = "Required parameter is missing: "
+                + ex.getParameterName();
+
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                message,
+                request.getRequestURI()
+        );
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleResourceNotFound(
+            NoResourceFoundException ex,
+            HttpServletRequest request) {
+
+        return buildResponse(
+                HttpStatus.NOT_FOUND,
+                "The requested resource was not found.",
+                request.getRequestURI()
+        );
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpectedError(
             Exception ex,
             HttpServletRequest request) {
-        logger.error("Unexpected error at path: {}", request.getRequestURI(), ex);
-        
+
+        logger.error(
+                "Unexpected error at path: {}",
+                request.getRequestURI(),
+                ex
+        );
+
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "An unexpected server error occurred.",
@@ -115,22 +173,15 @@ public class GlobalExceptionHandler {
             String path) {
 
         Map<String, Object> body = new LinkedHashMap<>();
+
         body.put("timestamp", Instant.now().toString());
         body.put("status", status.value());
         body.put("error", status.getReasonPhrase());
         body.put("message", message);
         body.put("path", path);
 
-        return ResponseEntity.status(status).body(body);
+        return ResponseEntity
+                .status(status)
+                .body(body);
     }
-
-    @ExceptionHandler(NoResourceFoundException.class)
-     public ResponseEntity<Map<String, Object>> handleResourceNotFound(
-        NoResourceFoundException ex,
-        HttpServletRequest request) {
-
-        return buildResponse(
-            HttpStatus.NOT_FOUND,
-            "The requested resource was not found.",request.getRequestURI());
-        }
 }
