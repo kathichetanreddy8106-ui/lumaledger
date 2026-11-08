@@ -54,3 +54,16 @@ CREATE TABLE IF NOT EXISTS recurring_payments (
         FOREIGN KEY (category_id) REFERENCES categories(id)
         ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    transaction_id BIGINT NOT NULL,
+    action VARCHAR(10) NOT NULL,
+    amount DECIMAL(15, 2) NOT NULL,
+    type VARCHAR(10) NOT NULL,
+    category_id BIGINT NULL,
+    description VARCHAR(500),
+    transaction_date DATE NOT NULL,
+    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_audit_action
+        CHECK (action IN ('CREATE', 'UPDATE', 'DELETE'))
+);

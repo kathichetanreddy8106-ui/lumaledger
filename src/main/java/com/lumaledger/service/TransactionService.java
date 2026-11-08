@@ -4,6 +4,7 @@ package com.lumaledger.service;
 import com.lumaledger.model.Transaction;
 import com.lumaledger.model.TransactionType;
 import com.lumaledger.repository.TransactionRepository;
+import com.lumaledger.repository.AuditLogRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,16 +16,25 @@ import java.util.List;
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+    private final AuditLogRepository auditLogRepository;
 
-    public TransactionService(TransactionRepository transactionRepository) {
+    public TransactionService(
+            TransactionRepository transactionRepository,
+            AuditLogRepository auditLogRepository) {
         this.transactionRepository = transactionRepository;
+        this.auditLogRepository = auditLogRepository;
     }
 
     @Transactional
     public Transaction create(Transaction transaction) {
         validateTransaction(transaction);
         transaction.setId(null);
-        return transactionRepository.create(transaction);
+
+        Transaction created = transactionRepository.create(transaction);
+
+        auditLogRepository.save("CREATE", created);
+
+        return created;
     }
 
     public Transaction getById(Long id) {
@@ -43,9 +53,8 @@ public class TransactionService {
         validateId(id);
         validateTransaction(transaction);
 
-        if (transactionRepository.findById(id).isEmpty()) {
-            throw new TransactionNotFoundException(id);
-        }
+        transactionRepository.findById(id)
+                .orElseThrow(() -> new TransactionNotFoundException(id));
 
         transaction.setId(id);
 
@@ -53,13 +62,22 @@ public class TransactionService {
             throw new TransactionNotFoundException(id);
         }
 
-        return transactionRepository.findById(id)
+        Transaction updated = transactionRepository.findById(id)
                 .orElseThrow(() -> new TransactionNotFoundException(id));
+
+        auditLogRepository.save("UPDATE", updated);
+
+        return updated;
     }
 
     @Transactional
     public void delete(Long id) {
         validateId(id);
+
+        Transaction existing = transactionRepository.findById(id)
+                .orElseThrow(() -> new TransactionNotFoundException(id));
+
+        auditLogRepository.save("DELETE", existing);
 
         if (!transactionRepository.deleteById(id)) {
             throw new TransactionNotFoundException(id);
@@ -81,13 +99,21 @@ public class TransactionService {
         return transactionRepository.search(from, to, type, description);
     }
 
-    public BigDecimal getMonthlyTotal(TransactionType type, int year, int month) {
+    public BigDecimal getMonthlyTotal(
+            TransactionType type,
+            int year,
+            int month
+    ) {
         if (type == null) {
-            throw new IllegalArgumentException("Transaction type is required");
+            throw new IllegalArgumentException(
+                    "Transaction type is required"
+            );
         }
 
         if (year < 1 || month < 1 || month > 12) {
-            throw new IllegalArgumentException("Invalid year or month");
+            throw new IllegalArgumentException(
+                    "Invalid year or month"
+            );
         }
 
         return transactionRepository.getMonthlyTotal(type, year, month);
